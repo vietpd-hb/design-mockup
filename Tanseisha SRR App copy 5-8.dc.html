@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="page" />
+  <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: Canvas; }
+    a { color: LinkText; }
+    /* deep-links inside the table read as plain text; hover still reveals the link */
+    s-table s-link {
+      --s-link-color-26021: currentColor;
+      --s-link-color-hover-26021: currentColor;
+      --s-link-color-active-26021: currentColor;
+    }
+    a:hover { color: LinkText; }
+  </style>
+</helmet>
+
+<s-box background="strong" padding="small-200">
+  <s-stack direction="block" gap="small-200">
+    <s-stack direction="inline" gap="small-200" alignItems="center">
+      <s-text color="subdued" fontWeight="bold">プレビュー切替（実装対象外）</s-text>
+      <s-clickable-chip selected="{{ isHome }}" onClick="{{ goHome }}">SCR-P2-01 注文一覧</s-clickable-chip>
+      <s-clickable-chip selected="{{ isSettings }}" data-act="goSettings">SCR-P2-02 Startrail 設定</s-clickable-chip>
+    </s-stack>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <sc-for list="{{ bannerChips }}" as="c" hint-placeholder-count="5">
+        <s-clickable-chip selected="{{ c.on }}" onClick="{{ c.go }}">{{ c.label }}</s-clickable-chip>
+      </sc-for>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <sc-for list="{{ stateChips }}" as="c" hint-placeholder-count="11">
+        <s-clickable-chip selected="{{ c.on }}" onClick="{{ c.go }}">{{ c.label }}</s-clickable-chip>
+      </sc-for>
+    </div>
+  </s-stack>
+</s-box>
+
+<s-app-nav>
+  <s-link href="#" rel="home" onClick="{{ goHome }}">ホーム</s-link>
+  <s-link href="#" data-act="goSettings">設定</s-link>
+</s-app-nav>
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+  <s-page heading="注文一覧">
+    <sc-if value="{{ portReady }}" hint-placeholder-val="{{ true }}">
+      <s-button slot="primary-action" variant="primary" data-act="openPort">Startrail PORT を開く</s-button>
+    </sc-if>
+    <sc-if value="{{ portMissing }}" hint-placeholder-val="{{ false }}">
+      <s-button slot="primary-action" variant="primary" disabled>Startrail PORT を開く<s-tooltip>Startrail PORT の URL が未設定です</s-tooltip></s-button>
+    </sc-if>
+
+    <sc-if value="{{ bMsg01 }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="success" dismissible heading="アプリのインストールが完了しました。設定を開始できます。"></s-banner>
+    </sc-if>
+    <sc-if value="{{ bMsg03 }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="critical" heading="認証に失敗しました。お手数ですが、もう一度お試しください。"></s-banner>
+    </sc-if>
+    <sc-if value="{{ bMsg05 }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="warning" dismissible heading="一時的なエラーが発生しました。しばらくしてからもう一度お試しください。"></s-banner>
+    </sc-if>
+    <sc-if value="{{ bMsg07 }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="warning" heading="追加の権限が許可されていないため、一部の機能はご利用いただけません。権限を許可すると利用可能になります。">
+        <s-button slot="primary-action" variant="primary" data-act="requestScopes">権限を許可する</s-button>
+      </s-banner>
+    </sc-if>
+
+    <sc-if value="{{ stErrorLoad }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="critical" heading="注文データの取得に失敗しました。時間をおいて再試行してください。">
+        <s-button slot="primary-action" variant="secondary" data-act="retry">再試行</s-button>
+      </s-banner>
+    </sc-if>
+    <sc-if value="{{ stRateLimit }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="warning" heading="混雑しているため読み込めませんでした。しばらくして再試行してください。">
+        <s-button slot="primary-action" variant="secondary" data-act="retry">再試行</s-button>
+      </s-banner>
+    </sc-if>
+    <sc-if value="{{ stStale }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="info" dismissible heading="表示が最新でない可能性があります。再読込してください。">
+        <s-button slot="primary-action" variant="secondary" data-act="retry">再読込</s-button>
+      </s-banner>
+    </sc-if>
+    <sc-if value="{{ stDrift }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="info" heading="一覧が更新されました。リフレッシュして最新に同期してください。">
+        <s-button slot="primary-action" variant="secondary" data-act="retry">リフレッシュ</s-button>
+      </s-banner>
+    </sc-if>
+    <sc-if value="{{ stPopup }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="warning" heading="新しいタブを開けませんでした。こちらのリンクから手動で開いてください。">
+        <s-link slot="primary-action" href="https://port.startrail.io/" target="_blank">https://port.startrail.io/</s-link>
+      </s-banner>
+    </sc-if>
+    <sc-if value="{{ overLimit }}" hint-placeholder-val="{{ false }}">
+      <s-banner tone="info" heading="{{ limitMessage }}"></s-banner>
+    </sc-if>
+
+    <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+      <s-section>
+        <s-stack direction="block" gap="base" alignItems="center">
+          <s-spinner accessibilityLabel="読み込み中"></s-spinner>
+          <s-text color="subdued">注文データを読み込んでいます…</s-text>
+        </s-stack>
+        <s-divider></s-divider>
+        <s-stack direction="block" gap="small-200">
+          <sc-for list="{{ skeleton }}" as="s" hint-placeholder-count="6">
+            <s-box background="subdued" padding="base" borderRadius="base"></s-box>
+          </sc-for>
+        </s-stack>
+      </s-section>
+    </sc-if>
+
+    <sc-if value="{{ stEmptyNoSrr }}" hint-placeholder-val="{{ false }}">
+      <s-section>
+        <s-stack direction="block" gap="base" alignItems="center">
+          <s-heading>SRR 対象の注文がありません</s-heading>
+          <s-paragraph color="subdued">SRR 対象の注文がありません。フィルタ条件や商品の SRR フラグをご確認ください。</s-paragraph>
+          <s-stack direction="inline" gap="small-200">
+            <s-button variant="secondary" data-act="openPort">設定手順を見る</s-button>
+            <s-button variant="primary" data-act="goSettings">Startrail 設定を開く</s-button>
+          </s-stack>
+        </s-stack>
+      </s-section>
+    </sc-if>
+
+    <sc-if value="{{ showTable }}" hint-placeholder-val="{{ true }}">
+      <s-section padding="none">
+        <s-table paginate="{{ true }}" hasPreviousPage="{{ hasPrev }}" hasNextPage="{{ hasNext }}" data-pager="1">
+          <s-stack slot="filters" direction="block" gap="small-300">
+            <sc-if value="{{ bulkMode }}" hint-placeholder-val="{{ false }}">
+              <s-box padding="small" background="strong" borderRadius="base">
+                <s-stack direction="inline" gap="base" alignItems="center">
+                  <s-text fontWeight="bold">{{ selectedLabel }}</s-text>
+                  <s-button variant="secondary" disabled="{{ issueDisabled }}" loading="{{ bulkRunning }}" data-act="openBulk">手動で発行する</s-button>
+                  <s-button variant="tertiary" data-act="clearSelection">選択を解除</s-button>
+                  <sc-if value="{{ overLimit }}" hint-placeholder-val="{{ false }}">
+                    <s-text color="critical">{{ limitMessage }}</s-text>
+                  </sc-if>
+                </s-stack>
+              </s-box>
+            </sc-if>
+
+            <sc-if value="{{ filterMode }}" hint-placeholder-val="{{ true }}">
+              <s-stack direction="block" gap="small-300">
+                <s-stack direction="inline" gap="small-200" alignItems="center">
+                  <s-clickable-chip selected="{{ tabAllOn }}" onClick="{{ setTabAll }}">すべて</s-clickable-chip>
+                  <s-clickable-chip selected="{{ tabTodoOn }}" onClick="{{ setTabTodo }}">要対応</s-clickable-chip>
+                  <s-clickable-chip selected="{{ tabUnsentOn }}" onClick="{{ setTabUnsent }}">未発送</s-clickable-chip>
+                </s-stack>
+                <s-grid gridTemplateColumns="1fr auto auto" gap="small-200">
+                  <s-search-field label="検索" labelAccessibilityVisibility="exclusive" icon="search" placeholder="注文番号・商品・作家・顧客で検索" value="{{ fQuery }}" data-f="q"></s-search-field>
+                  <s-button variant="tertiary" icon="filter" data-act="toggleFilters">{{ filterToggleLabel }}</s-button>
+                  <sc-if value="{{ filtersActive }}" hint-placeholder-val="{{ false }}">
+                    <s-button variant="tertiary" data-act="clearFilters">フィルタ解除</s-button>
+                  </sc-if>
+                </s-grid>
+                <sc-if value="{{ filtersOpen }}" hint-placeholder-val="{{ false }}">
+                <s-grid gridTemplateColumns="1fr 1fr" gap="small-300">
+                  <s-grid gridTemplateColumns="1fr 1fr" gap="small-200">
+                    <s-date-field label="購入日（開始）" value="{{ dateFrom }}" data-f="from"></s-date-field>
+                    <s-date-field label="購入日（終了）" value="{{ dateTo }}" data-f="to"></s-date-field>
+                  </s-grid>
+                  <s-select label="販売チャネル" value="{{ fChannel }}" data-f="channel">
+                    <s-option value="all">すべて</s-option>
+                    <s-option value="EC">EC</s-option>
+                    <s-option value="POS">POS</s-option>
+                  </s-select>
+                  <s-select label="SRR ステータス" value="{{ fSrr }}" data-f="srr">
+                    <s-option value="all">すべて</s-option>
+                    <s-option value="none">発行不要</s-option>
+                    <s-option value="requested">発行依頼済</s-option>
+                    <s-option value="issued">発行済</s-option>
+                    <s-option value="error">エラー</s-option>
+                    <s-option value="unknown">ステータス不明</s-option>
+                  </s-select>
+                  <s-select label="NFC 発送ステータス" value="{{ fNfc }}" data-f="nfc">
+                    <s-option value="all">すべて</s-option>
+                    <s-option value="out">対象外</s-option>
+                    <s-option value="unsent">未発送</s-option>
+                    <s-option value="sent">発送済</s-option>
+                    <s-option value="unknown">ステータス不明</s-option>
+                  </s-select>
+                </s-grid>
+                </sc-if>
+              </s-stack>
+            </sc-if>
+          </s-stack>
+
+          <s-table-header-row>
+            <s-table-header>
+              <s-checkbox accessibilityLabel="表示中のエラー行をすべて選択" checked="{{ allChecked }}" indeterminate="{{ someChecked }}" disabled="{{ noSelectable }}" data-sel="__all"></s-checkbox>
+            </s-table-header>
+            <s-table-header listSlot="primary">注文番号</s-table-header>
+            <s-table-header>購入日</s-table-header>
+            <s-table-header>販売チャネル</s-table-header>
+            <s-table-header>ユニット</s-table-header>
+            <s-table-header>作家名</s-table-header>
+            <s-table-header>顧客</s-table-header>
+            <s-table-header listSlot="secondary">SRR ステータス</s-table-header>
+            <s-table-header listSlot="labeled">NFC 発送ステータス</s-table-header>
+          </s-table-header-row>
+
+          <s-table-body>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+              <s-table-row>
+                <s-table-cell>
+                  <s-checkbox accessibilityLabel="{{ r.selectLabel }}" checked="{{ r.checked }}" disabled="{{ r.locked }}" data-sel="{{ r.key }}"></s-checkbox>
+                </s-table-cell>
+                <s-table-cell>
+                  <s-link href="{{ r.orderUrl }}" target="_blank">{{ r.order }}</s-link>
+                </s-table-cell>
+                <s-table-cell><s-text>{{ r.date }}</s-text></s-table-cell>
+                <s-table-cell><s-text>{{ r.channel }}</s-text></s-table-cell>
+                <s-table-cell><s-text format="numeric">{{ r.unitLabel }}</s-text></s-table-cell>
+                <s-table-cell><s-text>{{ r.artist }}</s-text></s-table-cell>
+                <s-table-cell>
+                  <s-stack direction="block" gap="none">
+                    <s-link href="{{ r.customerUrl }}" target="_blank">{{ r.customer }}</s-link>
+                    <s-text color="subdued">{{ r.email }}</s-text>
+                  </s-stack>
+                </s-table-cell>
+                <s-table-cell><s-badge tone="{{ r.srrTone }}">{{ r.srrLabel }}</s-badge></s-table-cell>
+                <s-table-cell><s-badge tone="{{ r.nfcTone }}">{{ r.nfcLabel }}</s-badge></s-table-cell>
+              </s-table-row>
+            </sc-for>
+          </s-table-body>
+        </s-table>
+
+        <sc-if value="{{ stEmptyFilter }}" hint-placeholder-val="{{ false }}">
+          <s-box padding="large-400">
+            <s-stack direction="block" gap="base" alignItems="center">
+              <s-heading>条件に一致する結果がありません</s-heading>
+              <s-paragraph color="subdued">条件に一致する結果がありません。条件を緩めてお試しください。</s-paragraph>
+              <s-button variant="secondary" data-act="clearFilters">フィルタ解除</s-button>
+            </s-stack>
+          </s-box>
+        </sc-if>
+
+      </s-section>
+    </sc-if>
+  </s-page>
+
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,0.45);display:grid;place-items:center;padding:24px;z-index:50">
+      <div style="inline-size:min(560px, 92vw);max-block-size:86vh;overflow:auto">
+        <s-section heading="{{ modalHeading }}">
+    <sc-if value="{{ step1 }}" hint-placeholder-val="{{ false }}">
+      <s-stack direction="block" gap="base">
+        <s-banner tone="warning">証明書の発行はブロックチェーン上で行われ、取り消すことができません。</s-banner>
+        <s-box maxBlockSize="240px" overflow="auto">
+          <s-stack direction="block" gap="small-200">
+            <sc-for list="{{ pending }}" as="p" hint-placeholder-count="3">
+              <s-box padding="small-300" background="subdued" borderRadius="base">
+                <s-grid gridTemplateColumns="1fr auto" gap="small-300" alignItems="center">
+                  <s-stack direction="block" gap="none">
+                    <s-text fontWeight="bold">{{ p.order }}</s-text>
+                    <s-text color="subdued">{{ p.product }}</s-text>
+                  </s-stack>
+                  <s-badge tone="{{ p.errTone }}">{{ p.errLabel }}</s-badge>
+                </s-grid>
+              </s-box>
+            </sc-for>
+          </s-stack>
+        </s-box>
+      </s-stack>
+      <s-box paddingBlockStart="base">
+        <s-stack direction="inline" gap="small-200" justifyContent="end">
+          <s-button variant="secondary" data-act="closeModal">キャンセル</s-button>
+          <s-button variant="primary" data-act="runBulk">発行する</s-button>
+        </s-stack>
+      </s-box>
+    </sc-if>
+
+    <sc-if value="{{ step2 }}" hint-placeholder-val="{{ false }}">
+      <s-stack direction="block" gap="base" alignItems="center">
+        <s-spinner accessibilityLabel="処理中"></s-spinner>
+        <s-text fontWeight="bold">{{ progressLabel }}</s-text>
+        <s-text color="subdued">処理中です。しばらくお待ちください</s-text>
+      </s-stack>
+      <s-stack direction="inline" gap="small-200" justifyContent="end">
+        <s-button variant="secondary" disabled>キャンセル</s-button>
+        <s-button variant="primary" disabled loading>発行する</s-button>
+      </s-stack>
+    </sc-if>
+
+    <sc-if value="{{ step3 }}" hint-placeholder-val="{{ false }}">
+      <s-stack direction="block" gap="base">
+        <s-text fontWeight="bold">{{ resultSummary }}</s-text>
+        <s-table>
+          <s-table-header-row>
+            <s-table-header listSlot="primary">注文番号</s-table-header>
+            <s-table-header>商品名</s-table-header>
+            <s-table-header listSlot="secondary">結果</s-table-header>
+            <s-table-header listSlot="labeled">理由</s-table-header>
+          </s-table-header-row>
+          <s-table-body>
+            <sc-for list="{{ results }}" as="x" hint-placeholder-count="4">
+              <s-table-row>
+                <s-table-cell><s-text fontWeight="bold">{{ x.order }}</s-text></s-table-cell>
+                <s-table-cell><s-text>{{ x.product }}</s-text></s-table-cell>
+                <s-table-cell><s-badge tone="{{ x.tone }}">{{ x.label }}</s-badge></s-table-cell>
+                <s-table-cell><s-text color="subdued">{{ x.reason }}</s-text></s-table-cell>
+              </s-table-row>
+            </sc-for>
+          </s-table-body>
+        </s-table>
+      </s-stack>
+      <s-stack direction="inline" gap="small-200" justifyContent="end">
+        <s-button variant="primary" data-act="finishBulk">閉じる</s-button>
+      </s-stack>
+    </sc-if>
+        </s-section>
+      </div>
+    </div>
+  </sc-if>
+</sc-if>
+
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+  <form data-save-bar data-discard-confirmation onSubmit="{{ onSubmit }}" onReset="{{ onReset }}">
+    <s-page heading="Startrail 設定" inlineSize="small">
+      <sc-if value="{{ bMsg01 }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="success" dismissible heading="アプリのインストールが完了しました。設定を開始できます。"></s-banner>
+      </sc-if>
+      <sc-if value="{{ bMsg03 }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="critical" heading="認証に失敗しました。お手数ですが、もう一度お試しください。"></s-banner>
+      </sc-if>
+      <sc-if value="{{ bMsg05 }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="warning" dismissible heading="一時的なエラーが発生しました。しばらくしてからもう一度お試しください。"></s-banner>
+      </sc-if>
+      <sc-if value="{{ bMsg07 }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="warning" heading="追加の権限が許可されていないため、一部の機能はご利用いただけません。権限を許可すると利用可能になります。">
+          <s-button slot="primary-action" variant="primary" data-act="requestScopes">権限を許可する</s-button>
+        </s-banner>
+      </sc-if>
+
+      <sc-if value="{{ sSuccess }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="success" dismissible heading="設定を保存しました。"></s-banner>
+      </sc-if>
+      <sc-if value="{{ sKeyInvalid }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="critical" heading="API キーが無効です。再度入力してください。">
+          ログイン方式の変更も保存されていません。
+        </s-banner>
+      </sc-if>
+      <sc-if value="{{ sNoResponse }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="warning" heading="Startrail が応答しません。しばらくしてから再度お試しください。">
+          ログイン方式の変更も保存されていません。
+        </s-banner>
+      </sc-if>
+      <sc-if value="{{ sDbFail }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="critical" heading="設定の保存に失敗しました。もう一度お試しください。">
+          ログイン方式の変更も保存されていません。
+        </s-banner>
+      </sc-if>
+      <sc-if value="{{ sCollectionChanged }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="info" heading="コレクションアドレスを変更したため、接続を再確認します。"></s-banner>
+      </sc-if>
+      <sc-if value="{{ noProvider }}" hint-placeholder-val="{{ false }}">
+        <s-banner tone="critical" heading="ログイン方式を1つ以上有効にしてください。"></s-banner>
+      </sc-if>
+
+      <s-section heading="Startrail 連携情報">
+        <s-stack direction="block" gap="base">
+          <s-text-field label="LUW ウォレットアドレス" required value="{{ luw }}" error="{{ luwError }}" disabled="{{ formLocked }}" details="Startrail PORT の管理画面からコピーしてください。" data-f="luw"></s-text-field>
+          <s-text-field label="コレクションアドレス" required value="{{ collection }}" error="{{ collectionError }}" disabled="{{ formLocked }}" details="1 ストアにつき 1 コレクションを登録します。" data-f="collection"></s-text-field>
+
+          <sc-if value="{{ keyMasked }}" hint-placeholder-val="{{ true }}">
+            <s-stack direction="inline" gap="small-200" alignItems="end">
+              <s-text-field label="Startrail API キー" readOnly value="{{ apiKeyMask }}" details="保存済みのキーは表示されません。" data-f="apikeymask"></s-text-field>
+              <s-button variant="secondary" disabled="{{ formLocked }}" data-act="startKeyEdit">変更する</s-button>
+            </s-stack>
+          </sc-if>
+          <sc-if value="{{ keyEditing }}" hint-placeholder-val="{{ false }}">
+            <s-stack direction="inline" gap="small-200" alignItems="end">
+              <s-password-field label="Startrail API キー" required autoComplete="off" disabled="{{ formLocked }}" details="保存時に Startrail への接続テストを行います。" data-f="apikey"></s-password-field>
+              <s-button variant="tertiary" disabled="{{ formLocked }}" data-act="cancelKeyEdit">キャンセル</s-button>
+            </s-stack>
+          </sc-if>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="顧客向けログイン方式">
+        <s-stack direction="block" gap="base">
+          <s-paragraph color="subdued">ストアフロントの Startrail ログイン画面で、購入者に表示されるログイン方式です。1 つ以上を有効にしてください。</s-paragraph>
+          <sc-for list="{{ providers }}" as="p" hint-placeholder-count="7">
+            <s-switch label="{{ p.label }}" checked="{{ p.on }}" disabled="{{ formLocked }}" details="{{ p.help }}" data-prov="{{ p.key }}"></s-switch>
+          </sc-for>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="ヘルプ">
+        <s-stack direction="block" gap="small-300">
+          <s-paragraph>LUW ウォレットアドレスとコレクションアドレスは Startrail PORT の「Organization」ページ、API キーは「Developer」ページで確認できます。</s-paragraph>
+          <s-paragraph color="subdued">変更した設定は、これ以降に発行される SRR にのみ適用されます。発行済みの SRR は変更されません。</s-paragraph>
+          <s-link href="https://port.startrail.io/" target="_blank">Startrail PORT を開く</s-link>
+        </s-stack>
+      </s-section>
+    </s-page>
+  </form>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000}}">
+// Tanseisha SRR app - Phase 2 UI preview (SCR-P2-00 / 01 / 01.a / 01.b / 02).
+// Display copy is Japanese; comments are English. Codes map to the design decision log.
+const CONFIG = {
+  // DEC-08: bulk issue cap lives in config, never hardcoded in markup.
+  BULK_ISSUE_LIMIT: 20,
+  PORT_URL: 'https://port.startrail.io/',
+  SEARCH_MIN_CHARS: 2, // DEC-03
+  SEARCH_DEBOUNCE_MS: 300, // DEC-03
+  DEFAULT_RANGE_DAYS: 30, // DEC-02
+  ORDERS_PER_PAGE: 5, // pagination counts ORDERS, so the row count per page varies
+};
+
+const SRR = {
+  none: { label: '発行不要', tone: 'auto' },
+  requested: { label: '発行依頼済', tone: 'info' },
+  issued: { label: '発行済', tone: 'success' },
+  error: { label: 'エラー', tone: 'critical' },
+  unknown: { label: 'ステータス不明', tone: 'caution' }, // EC-03
+};
+const NFC = {
+  out: { label: '対象外', tone: 'auto' },
+  unsent: { label: '未発送', tone: 'caution' },
+  sent: { label: '発送済', tone: 'success' },
+  cancelled: { label: 'キャンセル済', tone: 'critical' },
+  unknown: { label: 'ステータス不明', tone: 'caution' }, // EC-03
+};
+
+// Bulk issue outcomes (SCR-P2-01.b) - one entry per documented failure cause.
+const OUTCOME = {
+  ok: { tone: 'success', label: '発行済', reason: '' },
+  noWallet: { tone: 'critical', label: '失敗', reason: '顧客のウォレット保存が必要です' }, // EC-02
+  noChip: { tone: 'critical', label: '失敗', reason: 'チップUID在庫切れのため発行できません' }, // EC-03
+  rejected: { tone: 'critical', label: '失敗', reason: '発行に失敗しました。ウォレットまたは設定を確認してください' }, // EC-04
+  timeout: { tone: 'warning', label: '再試行', reason: '一時的なエラーです。後で再試行してください' }, // EC-05
+  skipped: { tone: 'info', label: 'スキップ', reason: '既に発行済みのためスキップしました' }, // EC-06
+  cancelled: { tone: 'caution', label: '対象外', reason: 'キャンセル済み注文のため再発行できません' }, // EC-09
+  mailFailed: { tone: 'warning', label: '要確認', reason: '証明書メールの送信に失敗しました（発行は完了しています）' }, // EC-08
+};
+
+// 1 row = 1 product unit. Orders own several rows; pagination is per order.
+const ORDER_URL = 'https://admin.shopify.com/store/tanseisha/orders/';
+const PROD_URL = 'https://admin.shopify.com/store/tanseisha/products/';
+const CUST_URL = 'https://admin.shopify.com/store/tanseisha/customers/';
+const RAW = [
+  ['#1042', '2026/07/28', 'EC', '田中 美咲', 'misaki.tanaka@example.jp', false, 'TS-ART-0121', '蒼海の記憶', '村上 隆之', 3, ['issued', 'error', 'error'], ['sent', 'unsent', 'unsent']],
+  ['#1042', '2026/07/28', 'EC', '田中 美咲', 'misaki.tanaka@example.jp', false, 'TS-ART-0088', '白磁の壺', '佐々木 蘭', 1, ['issued'], ['sent']],
+  ['#1041', '2026/07/27', 'POS', '山本 健太', 'kenta.yamamoto@example.jp', false, 'TS-ART-0203', '都市の呼吸', '井上 千尋', 1, ['requested'], ['unsent']],
+  ['#1039', '2026/07/25', 'EC', '中村 あかね', 'akane.nakamura@example.jp', false, 'TS-ART-0150', '光の断片', '大西 悠', 2, ['error', 'unknown'], ['unsent', 'unknown']],
+  ['#1039', '2026/07/25', 'EC', '中村 あかね', 'akane.nakamura@example.jp', false, 'TS-GDS-0011', '図録『丹青 2026』', '—', 1, ['none'], ['out']],
+  ['#1036', '2026/07/22', 'EC', '小林 直樹', 'naoki.kobayashi@example.jp', true, 'TS-ART-0177', '月虹', '藤田 慧', 1, ['error'], ['cancelled']],
+  ['#1034', '2026/07/20', 'POS', '高橋 詩織', 'shiori.takahashi@example.jp', false, 'TS-ART-0164', '遠雷', '村上 隆之', 1, ['issued'], ['sent']],
+  ['#1031', '2026/07/18', 'EC', '渡辺 悠真', 'yuma.watanabe@example.jp', false, 'TS-ART-0142', '群青の余白', '井上 千尋', 1, ['error'], ['unsent']],
+  ['#1031', '2026/07/18', 'EC', '渡辺 悠真', 'yuma.watanabe@example.jp', false, 'TS-ART-0143', '沈黙の庭', '井上 千尋', 1, ['issued'], ['sent']],
+  ['#1028', '2026/07/15', 'EC', '松本 千夏', 'chinatsu.matsumoto@example.jp', false, 'TS-ART-0110', '潮の記譜', '大西 悠', 1, ['unknown'], ['unknown']],
+  ['#1026', '2026/07/12', 'EC', '佐藤 陽菜', 'hina.sato@example.jp', false, 'TS-ART-0098', '夜明けの丘', '藤田 慧', 1, ['issued'], ['sent']],
+  ['#1024', '2026/07/10', 'POS', '伊藤 大和', 'yamato.ito@example.jp', false, 'TS-ART-0132', '白夜', '大西 悠', 2, ['error', 'issued'], ['unsent', 'sent']],
+  ['#1021', '2026/07/08', 'EC', '加藤 結衣', 'yui.kato@example.jp', false, 'TS-ART-0155', '風紋', '村上 隆之', 1, ['requested'], ['unsent']],
+  ['#1021', '2026/07/08', 'EC', '加藤 結衣', 'yui.kato@example.jp', false, 'TS-GDS-0012', 'ポストカードセット', '—', 1, ['none'], ['out']],
+  ['#1019', '2026/07/05', 'EC', '吉田 蓮', 'ren.yoshida@example.jp', false, 'TS-ART-0167', '静物 III', '佐々木 蘭', 1, ['issued'], ['sent']],
+  ['#1017', '2026/07/03', 'POS', '山口 芽衣', 'mei.yamaguchi@example.jp', false, 'TS-ART-0104', '残響', '井上 千尋', 3, ['issued', 'error', 'issued'], ['sent', 'unsent', 'sent']],
+  ['#1015', '2026/07/01', 'EC', '清水 陽向', 'hinata.shimizu@example.jp', false, 'TS-ART-0189', '岸辺の記憶', '藤田 慧', 1, ['unknown'], ['unknown']],
+  ['#1012', '2026/06/28', 'EC', '森 花音', 'kanon.mori@example.jp', false, 'TS-ART-0176', '灯', '大西 悠', 1, ['issued'], ['sent']],
+  ['#1010', '2026/06/25', 'POS', '池田 湊', 'minato.ikeda@example.jp', false, 'TS-ART-0118', '雪解け', '村上 隆之', 2, ['error', 'error'], ['unsent', 'unsent']],
+  ['#1007', '2026/06/22', 'EC', '橋本 咲希', 'saki.hashimoto@example.jp', false, 'TS-ART-0143', '沈黙の庭', '井上 千尋', 1, ['issued'], ['sent']],
+  ['#1004', '2026/06/20', 'EC', '石川 遥', 'haruka.ishikawa@example.jp', false, 'TS-ART-0201', '群像', '佐々木 蘭', 1, ['requested'], ['unsent']],
+  ['#1001', '2026/06/18', 'EC', '阿部 樹', 'itsuki.abe@example.jp', false, 'TS-ART-0210', '遠い光', '藤田 慧', 1, ['error'], ['unsent']],
+  ['#1001', '2026/06/18', 'EC', '阿部 樹', 'itsuki.abe@example.jp', false, 'TS-ART-0211', '余白の記譜', '藤田 慧', 1, ['issued'], ['sent']],
+];
+// Failure cause carried on each エラー row so the confirm step can explain itself.
+const ERR_CAUSE = {
+  wallet: { label: 'ウォレット未登録', tone: 'critical' },
+  metafield: { label: 'メタフィールド未設定', tone: 'critical' },
+  startrail: { label: 'Startrail 連携エラー', tone: 'warning' },
+  cancelled: { label: 'キャンセル済み注文', tone: 'caution' },
+};
+const CAUSE_ORDER = ['wallet', 'metafield', 'startrail'];
+
+const ALL_ROWS = [];
+let errSeq = 0;
+RAW.forEach((o, li) => {
+  for (let u = 0; u < o[9]; u++) {
+    const cause = o[10][u] !== 'error' ? null : (o[5] ? 'cancelled' : CAUSE_ORDER[errSeq++ % CAUSE_ORDER.length]);
+    ALL_ROWS.push({
+      cause,
+      key: o[0] + '-' + li + '-' + u,
+      order: o[0], date: o[1], channel: o[2],
+      customer: o[3], email: o[4], cancelled: o[5],
+      code: o[6], product: o[7], artist: o[8],
+      unit: u + 1, unitOf: o[9],
+      srr: o[10][u], nfc: o[11][u],
+      orderUrl: ORDER_URL + (5000 + li), productUrl: PROD_URL + (900 + li), customerUrl: CUST_URL + (300 + li),
+    });
+  }
+});
+
+const HOME_STATES = [
+  ['loading', '1 読み込み中'], ['default', '2 通常'], ['emptyNoSrr', '3 対象なし EC-02'], ['emptyFilter', '4 該当なし EC-04'],
+  ['errorLoad', '5 取得失敗 EC-01'], ['rateLimit', '6 混雑 EC-07'], ['stale', '7 古い可能性 EC-09'], ['drift', '8 一覧更新 EC-08'],
+  ['selecting', '9 行を選択中'], ['bulkRunning', '10 一括処理中'], ['popup', '11 タブ遮断 EC-10'],
+];
+const SETTINGS_STATES = [
+  ['empty', '1 初回・未設定'], ['saved', '2 設定済'], ['invalid', '3 形式エラー'], ['saving', '4 保存中'], ['success', '5 保存成功'],
+  ['keyInvalid', '6 APIキー無効 EC-02'], ['noResponse', '7 応答なし EC-03'], ['dbFail', '8 保存失敗 EC-04'], ['collectionChanged', '9 コレクション変更 EC-10'],
+];
+const BANNERS = [
+  ['none', 'バナーなし'], ['msg01', 'MSG-01 インストール完了'], ['msg03', 'MSG-03 認証失敗'],
+  ['msg05', 'MSG-05 一時エラー'], ['msg07', 'MSG-07 権限不足・機能ロック'],
+];
+const ADDR = /^0x[a-fA-F0-9]{40}$/;
+const BOOL_ATTRS = ['required', 'disabled', 'dismissible', 'checked', 'multiple', 'selected', 'loading', 'readonly', 'indeterminate', 'paginate', 'haspreviouspage', 'hasnextpage'];
+
+class Component extends DCLogic {
+  state = {
+    screen: 'home', banner: 'none', home: 'default', settings: 'saved',
+    tab: 'all', fChannel: 'all', fSrr: 'all', fNfc: 'all', fQuery: '',
+    dateFrom: '2026-07-04', dateTo: '2026-08-03',
+    selected: {}, step: 0, done: 0, results: [], filtersOpen: false, page: 0,
+    keyEditing: false,
+    luw: '0x8f2a41c7b9de0356a1c4f8e27b6d0913ca45ef82',
+    collection: '0x3ac59d1e77b0428fa6d95c31e0847b26df915ac0',
+    // DEC-11: rendered from data. google + email_passwordless are the Phase 1
+    // hardcoded pair, so they stay on as the safe fallback default.
+    providers: [
+      { key: 'google', label: 'Google アカウント', on: true, help: 'Google アカウントでログインします。' },
+      { key: 'email_passwordless', label: 'メールアドレス（パスワードなし）', on: true, help: 'メールに届くリンクでログインします。' },
+      { key: 'email_password', label: 'メールアドレス（パスワード）', on: false, help: 'メールアドレスとパスワードでログインします。' },
+      { key: 'apple', label: 'Apple ID', on: false, help: 'Apple ID でログインします。' },
+      { key: 'line', label: 'LINE', on: false, help: 'LINE アカウントでログインします。' },
+      { key: 'facebook', label: 'Facebook', on: false, help: 'Facebook アカウントでログインします。' },
+      { key: 'twitter', label: 'X（旧 Twitter）', on: false, help: 'X アカウントでログインします。' },
+    ],
+  };
+
+  // ---- preview plumbing -------------------------------------------------
+  componentDidMount() {
+    this.onNative = (e) => {
+      const t = e.target;
+      const sel = t.closest && t.closest('[data-sel]');
+      if (sel) return this.toggleRow(sel.getAttribute('data-sel'), t.checked);
+      const prov = t.closest && t.closest('[data-prov]');
+      if (prov) return this.toggleProvider(prov.getAttribute('data-prov'), t.checked);
+      const f = t.closest && t.closest('[data-f]');
+      if (f) return this.setField(f.getAttribute('data-f'), t.value);
+    };
+    document.addEventListener('change', this.onNative, true);
+    // Polaris s-button stops click propagation at its host, so bind actions
+    // directly on every [data-act] node instead of delegating (preview only).
+    this.bindActs = () => {
+      document.querySelectorAll('[data-act]').forEach((el) => {
+        if (el.__act) return;
+        el.__act = 1;
+        el.addEventListener('click', (e) => {
+          const fn = this._vals && this._vals[el.getAttribute('data-act')];
+          if (typeof fn === 'function') fn(e);
+        });
+      });
+      document.querySelectorAll('[data-pager]').forEach((el) => {
+        if (el.__pager) return;
+        el.__pager = 1;
+        el.addEventListener('nextpage', () => this._vals && this._vals.nextPage && this._vals.nextPage());
+        el.addEventListener('previouspage', () => this._vals && this._vals.prevPage && this._vals.prevPage());
+      });
+      document.querySelectorAll('s-clickable-chip, s-clickable, s-link').forEach((el) => {
+        if (el.__rcl) return;
+        const rk = Object.keys(el).find((k) => k.indexOf('__reactProps$') === 0);
+        if (!rk) return;
+        el.__rcl = 1;
+        el.addEventListener('click', (e) => {
+          const props = el[rk];
+          if (props && typeof props.onClick === 'function') props.onClick(e);
+        });
+      });
+    };
+    this.repair();
+    this._iv = setInterval(() => this.repair(), 250);
+  }
+  componentDidUpdate() { this.repair(); }
+  componentWillUnmount() { clearInterval(this._iv); document.removeEventListener('change', this.onNative, true); }
+
+  // Preview-only shim. Polaris uses manual slot assignment done once at upgrade
+  // time, so React re-renders leave containers with unassigned children. Also
+  // relaxes sub-pixel ellipsis that clips CJK text. None of this ships.
+  repair() {
+    if (!this._css) {
+      this._css = new CSSStyleSheet();
+      this._css.replaceSync(':host,:host *{letter-spacing:normal !important}:host h1,:host h2,:host h3,:host h4,:host p,:host span,:host label,:host legend{overflow:visible !important;text-overflow:clip !important}');
+    }
+    const norm = (s) => (s || '').replace(/-([a-z])/g, (m, c) => c.toUpperCase());
+    const walk = (root) => {
+      root.querySelectorAll('*').forEach((el) => {
+        const sr = el.shadowRoot;
+        if (!sr) return;
+        if (!sr.__css) { sr.__css = 1; try { sr.adoptedStyleSheets = [...sr.adoptedStyleSheets, this._css]; } catch (e) {} }
+        this.syncAttrs(el);
+        if (sr.slotAssignment === 'manual') {
+          const slots = [...sr.querySelectorAll('slot')];
+          const kids = [...el.childNodes].filter((n) => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
+          const assigned = slots.reduce((a, s) => a + s.assignedNodes().length, 0);
+          if (kids.length && !assigned) {
+            const used = new Set();
+            slots.filter((s) => s.name).forEach((s) => {
+              const m = kids.filter((k) => k.nodeType === 1 && norm(k.getAttribute('slot')) === norm(s.name));
+              m.forEach((k) => used.add(k));
+              try { s.assign(...m); } catch (e) {}
+            });
+            const defs = slots.filter((s) => !s.name);
+            const rest = kids.filter((k) => !used.has(k) && !(k.nodeType === 1 && (k.getAttribute('slot') || k.tagName === 'S-TOOLTIP')));
+            if (defs.length === 1) { try { defs[0].assign(...rest); } catch (e) {} }
+            else if (defs.length > 1) {
+              defs.forEach((s) => {
+                const box = s.parentElement ? String(s.parentElement.className || '') : '';
+                let take;
+                if (/filter/i.test(box)) take = kids.filter((k) => k.nodeType === 1 && k.getAttribute('slot') === 'filters');
+                else if (/head/i.test(box)) take = rest.filter((k) => k.tagName === 'S-TABLE-HEADER-ROW');
+                else take = rest.filter((k) => k.tagName !== 'S-TABLE-HEADER-ROW');
+                try { s.assign(...take); } catch (e) {}
+              });
+            }
+          }
+        }
+        walk(sr);
+      });
+    };
+    walk(document);
+    if (this.bindActs) this.bindActs();
+  }
+
+  // Preview-only. React writes camelCase Polaris props as properties once the
+  // custom element is already defined, and those writes do not reach the
+  // attribute the component actually reads. Mirror them back onto attributes.
+  syncAttrs(el) {
+    if (el.tagName.charCodeAt(0) !== 83 || el.tagName.indexOf('S-') !== 0) return;
+    if (!el.__rk) {
+      el.__rk = Object.keys(el).find((k) => k.indexOf('__reactProps$') === 0) || '-';
+    }
+    if (el.__rk === '-') return;
+    const props = el[el.__rk];
+    if (!props) return;
+    const active = document.activeElement === el;
+    for (const k in props) {
+      if (k === 'children' || k === 'slot' || k.indexOf('data-') === 0 || k.indexOf('aria-') === 0 || k.indexOf('on') === 0) continue;
+      // never mirror checked/indeterminate: Polaris re-emits change when the
+      // attribute is rewritten, which would clobber the real selection state
+      if (k === 'checked' || k === 'indeterminate') continue;
+      if (active && k === 'value') continue;
+      const v = props[k];
+      const t = typeof v;
+      if (t !== 'string' && t !== 'number' && t !== 'boolean') continue;
+      const a = k.toLowerCase();
+      const bool = BOOL_ATTRS.indexOf(a) >= 0;
+      if (bool) {
+        const on = v === true || v === '' || v === 'true';
+        if (on && !el.hasAttribute(a)) el.setAttribute(a, '');
+        if (!on && el.hasAttribute(a)) el.removeAttribute(a);
+        continue;
+      }
+      if (v === false || v === '' || v === null || v === undefined) {
+        if (el.hasAttribute(a)) el.removeAttribute(a);
+      } else {
+        const nv = v === true ? '' : String(v);
+        if (el.getAttribute(a) !== nv) el.setAttribute(a, nv);
+        if (a === 'value' && el.value !== v) { try { el.value = v; } catch (e) {} }
+      }
+    }
+  }
+
+  set(patch) { this.setState(patch); }
+  setField(name, value) {
+    if (name === 'from') return this.set({ dateFrom: value });
+    if (name === 'to') return this.set({ dateTo: value });
+    if (name === 'channel') return this.set({ fChannel: value, selected: {}, page: 0 });
+    if (name === 'srr') return this.set({ fSrr: value, selected: {}, page: 0 });
+    if (name === 'nfc') return this.set({ fNfc: value, selected: {}, page: 0 });
+    if (name === 'q') { // DEC-03: debounced, min 2 chars, AND-ed with the other filters
+      clearTimeout(this._q);
+      this._q = setTimeout(() => this.set({ fQuery: value, selected: {}, page: 0 }), CONFIG.SEARCH_DEBOUNCE_MS);
+      return;
+    }
+    if (name === 'luw') return this.set({ luw: value });
+    if (name === 'collection') return this.set({ collection: value });
+  }
+  toggleProvider(key, on) {
+    this.set({ providers: this.state.providers.map((p) => (p.key === key ? { ...p, on } : p)) });
+  }
+  toggleRow(key, on) {
+    if (key === '__all') { // header checkbox: selects visible error rows only, capped at the limit
+      const next = {};
+      if (on) this.visibleRows().filter((r) => this.selectable(r)).slice(0, CONFIG.BULK_ISSUE_LIMIT).forEach((r) => { next[r.key] = true; });
+      return this.set({ selected: next, home: on ? 'selecting' : 'default' });
+    }
+    const selected = { ...this.state.selected };
+    if (on) selected[key] = true; else delete selected[key];
+    this.set({ selected, home: Object.keys(selected).length ? 'selecting' : 'default' });
+  }
+
+  // ---- data -------------------------------------------------------------
+  selectable(r) { return r.srr === 'error' && !r.cancelled; } // VL-01
+  filterActive() {
+    const s = this.state;
+    return s.tab !== 'all' || s.fChannel !== 'all' || s.fSrr !== 'all' || s.fNfc !== 'all' || s.fQuery.trim().length >= CONFIG.SEARCH_MIN_CHARS;
+  }
+  match(r) { // DEC-07: status filters apply at ROW level, never at order level
+    const s = this.state;
+    if (s.tab === 'todo' && !(r.srr === 'error' || r.srr === 'unknown')) return false;
+    if (s.tab === 'unsent' && r.nfc !== 'unsent') return false;
+    if (s.fChannel !== 'all' && r.channel !== s.fChannel) return false;
+    if (s.fSrr !== 'all' && r.srr !== s.fSrr) return false;
+    if (s.fNfc !== 'all' && r.nfc !== s.fNfc) return false;
+    const q = s.fQuery.trim().toLowerCase();
+    if (q.length >= CONFIG.SEARCH_MIN_CHARS) { // DEC-03: exactly 6 searchable fields
+      const hay = [r.order, r.code, r.product, r.artist, r.customer, r.email].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
+  matchedRows() {
+    const h = this.state.home;
+    if (h === 'emptyNoSrr' || h === 'errorLoad' || h === 'loading' || h === 'emptyFilter') return [];
+    return ALL_ROWS.filter((r) => this.match(r));
+  }
+  // 1 page = N orders (never N rows), so a page holds a variable number of rows
+  pageSlice() {
+    const matched = this.matchedRows();
+    const orderIds = [];
+    matched.forEach((r) => { if (orderIds.indexOf(r.order) < 0) orderIds.push(r.order); });
+    const per = CONFIG.ORDERS_PER_PAGE;
+    const pageCount = Math.max(1, Math.ceil(orderIds.length / per));
+    const page = Math.min(this.state.page, pageCount - 1);
+    const ids = orderIds.slice(page * per, page * per + per);
+    return { matched, orderIds, pageCount, page, rows: matched.filter((r) => ids.indexOf(r.order) >= 0) };
+  }
+  visibleRows() { return this.pageSlice().rows; }
+
+  renderVals() {
+    const s = this.state;
+    const out = this.buildVals(s);
+    this._vals = out;
+    return out;
+  }
+
+  buildVals(s) {
+    const isHome = s.screen === 'home';
+    const slice = this.pageSlice();
+    const rowsRaw = slice.rows;
+    const perOrderHidden = {};
+    if (this.filterActive()) {
+      const byOrder = {};
+      ALL_ROWS.forEach((r) => { byOrder[r.order] = (byOrder[r.order] || 0) + 1; });
+      const shown = {};
+      rowsRaw.forEach((r) => { shown[r.order] = (shown[r.order] || 0) + 1; });
+      Object.keys(shown).forEach((o) => { perOrderHidden[o] = byOrder[o] - shown[o]; });
+    }
+    const rows = rowsRaw.map((r) => {
+      const locked = !this.selectable(r);
+      return {
+        ...r,
+        checked: !!s.selected[r.key],
+        locked,
+        selectLabel: locked ? (r.cancelled ? 'キャンセル済み注文のため再発行できません' : 'エラー状態の行のみ選択できます') : 'この行を選択',
+        unitLabel: r.unitOf + ' 点', // show the line item's total quantity only
+        srrTone: SRR[r.srr].tone, srrLabel: SRR[r.srr].label,
+        nfcTone: NFC[r.nfc].tone, nfcLabel: NFC[r.nfc].label,
+      };
+    });
+    const orderCount = slice.orderIds.length; // DEC-07: counts every matched row, not just this page
+    const firstOrder = slice.page * CONFIG.ORDERS_PER_PAGE + 1;
+    const lastOrder = Math.min(firstOrder + CONFIG.ORDERS_PER_PAGE - 1, orderCount);
+    const selectedKeys = Object.keys(s.selected);
+    const selCount = selectedKeys.length;
+    const overLimit = selCount > CONFIG.BULK_ISSUE_LIMIT;
+    const pending = ALL_ROWS.filter((r) => s.selected[r.key]).map((r) => ({
+      ...r,
+      errLabel: (ERR_CAUSE[r.cause] || ERR_CAUSE.startrail).label,
+      errTone: (ERR_CAUSE[r.cause] || ERR_CAUSE.startrail).tone,
+    }));
+    const done = s.done;
+
+    const chip = (list, cur, apply) => list.map(([k, label]) => ({ label, on: cur === k, go: () => apply(k) }));
+
+    const settings = s.settings;
+    const luwBad = settings === 'invalid' || !ADDR.test(s.luw);
+    const colBad = settings === 'invalid' || !ADDR.test(s.collection);
+    const anyProvider = s.providers.some((p) => p.on);
+
+    return {
+      isHome, isSettings: !isHome,
+      goHome: (e) => { if (e && e.preventDefault) e.preventDefault(); this.set({ screen: 'home' }); },
+      goSettings: (e) => { if (e && e.preventDefault) e.preventDefault(); this.set({ screen: 'settings' }); },
+      bannerChips: chip(BANNERS, s.banner, (k) => this.set({ banner: k })),
+      stateChips: isHome ? chip(HOME_STATES, s.home, (k) => this.set({ home: k, selected: k === 'selecting' ? this.preselect() : {}, step: k === 'bulkRunning' ? 2 : 0, done: k === 'bulkRunning' ? 2 : 0 }))
+        : chip(SETTINGS_STATES, settings, (k) => this.set({ settings: k, keyEditing: k === 'empty' })),
+
+      // SCR-P2-00 global banners
+      bMsg01: s.banner === 'msg01', bMsg03: s.banner === 'msg03', bMsg05: s.banner === 'msg05', bMsg07: s.banner === 'msg07',
+      requestScopes: () => { try { shopify.scopes.request(['write_orders']); } catch (e) {} }, // DEC-13
+
+      // SCR-P2-01 states
+      stLoading: s.home === 'loading',
+      stEmptyNoSrr: s.home === 'emptyNoSrr',
+      stEmptyFilter: s.home === 'emptyFilter',
+      stErrorLoad: s.home === 'errorLoad',
+      stRateLimit: s.home === 'rateLimit',
+      stStale: s.home === 'stale',
+      stDrift: s.home === 'drift',
+      stPopup: s.home === 'popup',
+      showTable: s.home !== 'loading' && s.home !== 'emptyNoSrr' && s.home !== 'errorLoad',
+      hasRows: rows.length > 0,
+      skeleton: [1, 2, 3, 4, 5, 6],
+      retry: () => this.set({ home: 'default' }),
+
+      portReady: s.banner !== 'msg07',
+      portMissing: s.banner === 'msg07', // DEC-13 keeps the control visible but locked
+      openPort: () => { const w = window.open(CONFIG.PORT_URL, '_blank'); if (!w) this.set({ home: 'popup' }); }, // DEC-04 / EC-10
+
+      rows, summary: orderCount + ' 注文 / ' + slice.matched.length + ' 商品',
+      pageLabel: orderCount + ' 注文中 ' + firstOrder + '〜' + lastOrder + ' 件目の注文（' + rows.length + ' 行）を表示しています',
+      hasPrev: slice.page > 0,
+      hasNext: slice.page < slice.pageCount - 1,
+      prevPage: () => this.set({ page: Math.max(0, this.state.page - 1), selected: {}, home: 'default' }),
+      nextPage: () => this.set({ page: this.state.page + 1, selected: {}, home: 'default' }),
+      tabAllOn: s.tab === 'all', tabTodoOn: s.tab === 'todo', tabUnsentOn: s.tab === 'unsent',
+      setTabAll: () => this.set({ tab: 'all', selected: {}, page: 0, home: 'default' }),
+      setTabTodo: () => this.set({ tab: 'todo', selected: {}, page: 0, home: 'default' }),
+      setTabUnsent: () => this.set({ tab: 'unsent', selected: {}, page: 0, home: 'default' }),
+      filtersOpen: s.filtersOpen,
+      filtersActive: this.filterActive() || !!s.dateFrom || !!s.dateTo,
+      filterToggleLabel: s.filtersOpen ? '絞り込みを隠す' : '絞り込み',
+      toggleFilters: () => this.set({ filtersOpen: !this.state.filtersOpen }),
+      dateFrom: s.dateFrom, dateTo: s.dateTo, fChannel: s.fChannel, fSrr: s.fSrr, fNfc: s.fNfc, fQuery: s.fQuery,
+      clearFilters: () => this.set({ tab: 'all', fChannel: 'all', fSrr: 'all', fNfc: 'all', fQuery: '', dateFrom: '', dateTo: '', selected: {}, page: 0, home: 'default' }),
+
+      allChecked: selCount > 0 && rows.filter((r) => !r.locked).every((r) => r.checked),
+      someChecked: selCount > 0 && !rows.filter((r) => !r.locked).every((r) => r.checked),
+      noSelectable: rows.filter((r) => !r.locked).length === 0,
+
+      // SCR-P2-01.a bulk layer
+      bulkMode: selCount > 0, filterMode: selCount === 0,
+      selectedLabel: selCount + ' 件選択中',
+      issueDisabled: selCount === 0 || overLimit,
+      bulkRunning: s.step === 2,
+      overLimit,
+      limitMessage: '一度に発行できるのは ' + CONFIG.BULK_ISSUE_LIMIT + ' 件までです。' + Math.min(selCount, CONFIG.BULK_ISSUE_LIMIT) + ' 件を選択しました。',
+      clearSelection: () => this.set({ selected: {}, page: 0, home: 'default' }),
+      openBulk: () => { this.set({ step: 1 }); this.showModal(true); },
+      closeModal: () => { this.showModal(false); this.set({ step: 0 }); },
+      runBulk: () => this.startBulk(),
+      finishBulk: () => { this.showModal(false); this.set({ step: 0, selected: {}, page: 0, home: 'default' }); },
+      modalHeading: s.step === 3 ? '発行結果' : (s.step === 2 ? '発行処理中' : selCount + ' 件を再発行しますか？'),
+      modalOpen: s.step > 0,
+      step1: s.step === 1, step2: s.step === 2, step3: s.step === 3,
+      pending,
+      progressLabel: done + ' / ' + Math.max(pending.length, 1) + ' 件 完了',
+      results: s.results,
+      resultSummary: '成功 ' + s.results.filter((r) => r.tone === 'success').length + ' 件 / 失敗 ' + s.results.filter((r) => r.tone !== 'success').length + ' 件',
+
+      // SCR-P2-02
+      sSuccess: settings === 'success', sKeyInvalid: settings === 'keyInvalid',
+      sNoResponse: settings === 'noResponse', sDbFail: settings === 'dbFail',
+      sCollectionChanged: settings === 'collectionChanged', // DEC-12
+      formLocked: settings === 'saving', // EC-06 double submit guard
+      luw: settings === 'empty' ? '' : (settings === 'invalid' ? '0x8f2a41' : s.luw),
+      collection: settings === 'empty' ? '' : (settings === 'invalid' ? 'not-an-address' : s.collection),
+      luwError: settings === 'invalid' || (settings !== 'empty' && luwBad) ? 'LUW アドレスの形式が正しくありません。' : '',
+      collectionError: settings === 'invalid' || (settings !== 'empty' && colBad) ? 'コレクションアドレスの形式が正しくありません。' : '',
+      keyMasked: settings !== 'empty' && !s.keyEditing, // DEC-10 state A
+      keyEditing: settings === 'empty' || s.keyEditing, // DEC-10 state B
+      apiKeyMask: '••••••••••••1234',
+      startKeyEdit: () => this.set({ keyEditing: true }),
+      cancelKeyEdit: () => this.set({ keyEditing: false }),
+      providers: s.providers, // DEC-11 rendered from data, never two hardcoded blocks
+      noProvider: !anyProvider,
+      onSubmit: (e) => { e.preventDefault(); this.set({ settings: 'saving' }); setTimeout(() => this.set({ settings: 'success', keyEditing: false }), 900); },
+      onReset: (e) => { e.preventDefault(); this.set({ settings: 'saved', keyEditing: false }); },
+    };
+  }
+
+  preselect() {
+    const sel = {};
+    ALL_ROWS.filter((r) => this.selectable(r)).slice(0, 2).forEach((r) => { sel[r.key] = true; });
+    return sel;
+  }
+  showModal(open) {
+    const el = document.getElementById('bulk-issue-modal');
+    if (!el) return;
+    try { open ? el.show() : el.hide(); } catch (e) {}
+  }
+  startBulk() {
+    const picked = ALL_ROWS.filter((r) => this.state.selected[r.key]);
+    this.set({ step: 2, done: 0 });
+    let i = 0;
+    const tick = () => {
+      i += 1;
+      this.set({ done: i });
+      if (i < picked.length) { this._t = setTimeout(tick, 700); return; }
+      const kinds = ['ok', 'noWallet', 'noChip', 'rejected', 'timeout', 'skipped', 'mailFailed', 'cancelled'];
+      const results = picked.map((r, n) => {
+        const k = r.cancelled ? 'cancelled' : kinds[n % kinds.length];
+        const o = OUTCOME[k];
+        return { order: r.order, product: r.product, tone: o.tone, label: o.label, reason: o.reason || '正常に発行されました' };
+      });
+      this._t = setTimeout(() => this.set({ step: 3, results }), 500);
+    };
+    this._t = setTimeout(tick, 700);
+  }
+}
+</script>
+</body>
+</html>
