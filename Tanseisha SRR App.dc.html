@@ -496,7 +496,8 @@ const RESULT_UNKNOWN = '結果不明';
 // What the toast says once the batch has left. Progress is the row's job from there on.
 const queuedToast = (n) => n + '件の注文の発行処理をキューに追加しました。進行状況は「SRR発行」列に表示されます。';
 
-const ORDER_URL = 'https://admin.shopify.com/store/tanseisha/orders/';
+// Detail deep-link target: dev store order (fixed sample order id for the prototype).
+const ORDER_URL = 'https://admin.shopify.com/store/dev-tanseisha-b-ownd/orders/7724286312691';
 const TODAY = '2026-08-06';
 
 // One seed entry = one ORDER. items: [sku, name, artist, qty, srrEligible].
@@ -561,7 +562,7 @@ function buildOrder(s, i) {
     itemCount, itemLabel: itemCount + '点', artistLabel,
     // product name / SKU stay searchable even though they are no longer columns
     hay: [s[0], s[3], s[4]].concat(items.map((it) => it[0] + ' ' + it[1] + ' ' + it[2])).join(' ').toLowerCase(),
-    orderUrl: ORDER_URL + (5000 + i),
+    orderUrl: ORDER_URL,
   };
 }
 

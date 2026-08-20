@@ -61,7 +61,8 @@ const SEED: Seed[] = [
   ['#1001', '2026-06-18', 'EC', '阿部 樹', 'itsuki.abe@example.jp', false, 'error', 'unsent', [['TS-ART-0210', '遠い光', '藤田 慧', 1, true], ['TS-ART-0211', '余白の記譜', '藤田 慧', 1, true]]],
 ];
 
-const ADMIN = 'https://admin.shopify.com/store/tanseisha';
+// Detail deep-link target: dev store order (fixed sample order id for the prototype).
+const ORDER_URL = 'https://admin.shopify.com/store/dev-tanseisha-b-ownd/orders/7724286312691';
 
 /** (proposal, not in DD-P2-003) representative artist name + "他N名" suffix at order grain */
 export function artistLabelOf(items: OrderItem[]): string {
@@ -77,7 +78,7 @@ export const MOCK_ORDERS: OrderRow[] = SEED.map((s, i) => {
   return {
     key: s[0],
     order: s[0],
-    orderUrl: `${ADMIN}/orders/${5000 + i}`,
+    orderUrl: ORDER_URL,
     date: s[1],
     channel: s[2],
     customer: s[3],
