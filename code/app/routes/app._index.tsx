@@ -530,15 +530,15 @@ export default function OrderListRoute() {
                   onChange={(e: any) => toggleAll(e.target.checked)}
                 ></s-checkbox>
               </s-table-header>
-              <s-table-header listSlot="primary">{LIST.COL_ORDER}</s-table-header>
-              <s-table-header>{LIST.COL_ITEM_COUNT}</s-table-header>
-              <s-table-header>{LIST.COL_DATE}</s-table-header>
-              <s-table-header>{LIST.COL_CHANNEL}</s-table-header>
-              <s-table-header>{LIST.COL_CUSTOMER}</s-table-header>
-              <s-table-header>{LIST.COL_EMAIL}</s-table-header>
-              <s-table-header listSlot="secondary">{LIST.COL_SRR}</s-table-header>
-              <s-table-header listSlot="labeled">{LIST.COL_NFC}</s-table-header>
-              <s-table-header>{LIST.COL_DETAIL}</s-table-header>
+              <s-table-header listSlot="primary"><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_ORDER}</div></s-table-header>
+              <s-table-header><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_ITEM_COUNT}</div></s-table-header>
+              <s-table-header><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_DATE}</div></s-table-header>
+              <s-table-header><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_CHANNEL}</div></s-table-header>
+              <s-table-header><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_CUSTOMER}</div></s-table-header>
+              <s-table-header><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_EMAIL}</div></s-table-header>
+              <s-table-header listSlot="secondary"><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_SRR}</div></s-table-header>
+              <s-table-header listSlot="labeled"><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_NFC}</div></s-table-header>
+              <s-table-header><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_DETAIL}</div></s-table-header>
             </s-table-header-row>
 
             <s-table-body>
@@ -572,7 +572,12 @@ export default function OrderListRoute() {
                       {/* keep the name on one line instead of one character per line */}
                       <div style={{ whiteSpace: 'nowrap' }}><s-text>{o.customer}</s-text></div>
                     </s-table-cell>
-                    <s-table-cell><s-text color="subdued">{o.customerEmail}</s-text></s-table-cell>
+                    <s-table-cell>
+                      {/* cap the email column so the table fits the page width */}
+                      <div style={{ maxInlineSize: '170px', overflowWrap: 'anywhere' }}>
+                        <s-text color="subdued">{o.customerEmail}</s-text>
+                      </div>
+                    </s-table-cell>
                     {/* orders without a tag stay in the list, shown as ー */}
                     <s-table-cell><s-badge tone={SRR_STATUS[o.srr].tone}>{SRR_STATUS[o.srr].label}</s-badge></s-table-cell>
                     {/*
@@ -582,14 +587,14 @@ export default function OrderListRoute() {
                     */}
                     <s-table-cell><s-badge tone={NFC_STATUS[o.nfc].tone}>{NFC_STATUS[o.nfc].label}</s-badge></s-table-cell>
                     <s-table-cell>
+                      {/* icon-only keeps the table inside the page width */}
                       <s-button
                         variant="tertiary"
+                        icon="chevron-right"
                         href={o.orderUrl}
                         target="_blank"
                         accessibilityLabel={LIST.detailLabel(o.order)}
-                      >
-                        {LIST.DETAIL}
-                      </s-button>
+                      ></s-button>
                     </s-table-cell>
                   </s-table-row>
                 );
@@ -661,7 +666,7 @@ export default function OrderListRoute() {
             </s-text>
             <s-table>
               <s-table-header-row>
-                <s-table-header listSlot="primary">{LIST.COL_ORDER}</s-table-header>
+                <s-table-header listSlot="primary"><div style={{ whiteSpace: 'nowrap' }}>{LIST.COL_ORDER}</div></s-table-header>
                 <s-table-header listSlot="secondary">{BULK.RESULT_COL_RESULT}</s-table-header>
                 <s-table-header listSlot="labeled">{BULK.RESULT_COL_REASON}</s-table-header>
               </s-table-header-row>

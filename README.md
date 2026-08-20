@@ -89,4 +89,3 @@ never a second popup. すべてクリア clears tokens and search but not the ta
   web components.
 - Bulk cap of 20 **orders** per run is a UI guard; DD-P2-004 TBD-01 (batch size)
   is open.
-"# design-mockup" 
